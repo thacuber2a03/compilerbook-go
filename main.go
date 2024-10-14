@@ -8,18 +8,30 @@ import (
 	"unicode"
 )
 
-func error(format string, a ...any) {
+var userInput string
+
+func errorAt(loc int, format string, a ...any) {
+	fmt.Fprintln(os.Stderr, userInput)
+	fmt.Fprintf(os.Stderr, "%s^ ",  strings.Repeat(" ", loc))
 	fmt.Fprintf(os.Stderr, format, a...)
-	fmt.Fprint(os.Stderr, "\n")
+	fmt.Fprintln(os.Stderr)
+	os.Exit(1)
+}
+
+func die(format string, a ...any) {
+	fmt.Fprintf(os.Stderr, format, a...)
+	fmt.Fprintln(os.Stderr)
 	os.Exit(1)
 }
 
 type (
 	TokenKind int
+
 	Token struct {
-		kind TokenKind
-		val int
-		str string
+		kind  TokenKind
+		val   int
+		str   string
+		index int
 	}
 )
 
@@ -31,10 +43,12 @@ const (
 
 var (
 	tokens = []Token{}
-	token *Token
+	token  *Token
 )
 
-func tokenize(p string) {
+func tokenize() {
+	p := userInput
+
 	for i := 0; i < len(p); i++ {
 		c := p[i]
 		if unicode.IsSpace(rune(c)) {
@@ -42,10 +56,11 @@ func tokenize(p string) {
 		}
 
 		if c == '+' || c == '-' {
-			tokens = append(tokens, Token{kind: tkReserved, str: string(c)})
+			tokens = append(tokens, Token{kind: tkReserved, str: string(c), index: i})
 			continue
 		}
 
+		index := i
 		var num strings.Builder
 		for i < len(p) && unicode.IsDigit(rune(p[i])) {
 			num.WriteByte(p[i])
@@ -56,12 +71,12 @@ func tokenize(p string) {
 
 		n, e := strconv.Atoi(s)
 		if e != nil {
-			error("cannot tokenize")
+			errorAt(i, "cannot tokenize")
 		}
-		tokens = append(tokens, Token{kind: tkNum, str: s, val: n})
+		tokens = append(tokens, Token{kind: tkNum, str: s, val: n, index: index})
 	}
 
-	tokens = append(tokens, Token{kind: tkEof})
+	tokens = append(tokens, Token{kind: tkEof, index: len(p)})
 	token = &tokens[0]
 }
 
@@ -80,14 +95,14 @@ func consume(op byte) bool {
 
 func expect(op byte) {
 	if token.kind != tkReserved || token.str[0] != op {
-		error("expected %c", op)
+		errorAt(token.index, "expected %c", op)
 	}
 	advance()
 }
 
 func expectNumber() int {
 	if token.kind != tkNum {
-		error("expected a number")
+		errorAt(token.index, "expected a number")
 	}
 
 	val := token.val
@@ -99,10 +114,11 @@ func atEof() bool { return token.kind == tkEof }
 
 func main() {
 	if len(os.Args) != 2 {
-		error("usage: 9cc [input]")
+		die("usage: 9cc [input]")
 	}
 
-	tokenize(os.Args[1])
+	userInput = os.Args[1]
+	tokenize()
 
 	fmt.Println(`.intel_syntax noprefix
 .globl main
