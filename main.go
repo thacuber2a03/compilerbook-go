@@ -66,7 +66,6 @@ func tokenize() {
 			num.WriteByte(p[i])
 			i++
 		}
-		i--
 		s := num.String()
 
 		n, e := strconv.Atoi(s)
@@ -74,6 +73,7 @@ func tokenize() {
 			errorAt(i, "cannot tokenize")
 		}
 		tokens = append(tokens, Token{kind: tkNum, str: s, val: n, index: index})
+		i--
 	}
 
 	tokens = append(tokens, Token{kind: tkEof, index: len(p)})
