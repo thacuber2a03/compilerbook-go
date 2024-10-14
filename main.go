@@ -3,41 +3,121 @@ package main
 import (
 	"fmt"
 	"os"
-	"regexp"
+	"strconv"
+	"strings"
+	"unicode"
 )
 
-func die(format string, a ...any) {
+func error(format string, a ...any) {
 	fmt.Fprintf(os.Stderr, format, a...)
 	fmt.Fprint(os.Stderr, "\n")
 	os.Exit(1)
 }
 
-func main() {
-	if len(os.Args) != 2 {
-		die("usage: 9cc [input]")
+type (
+	TokenKind int
+	Token struct {
+		kind TokenKind
+		val int
+		str string
+	}
+)
+
+const (
+	tkReserved TokenKind = iota
+	tkNum
+	tkEof
+)
+
+var (
+	tokens = []Token{}
+	token *Token
+)
+
+func tokenize(p string) {
+	for i := 0; i < len(p); i++ {
+		c := p[i]
+		if unicode.IsSpace(rune(c)) {
+			continue
+		}
+
+		if c == '+' || c == '-' {
+			tokens = append(tokens, Token{kind: tkReserved, str: string(c)})
+			continue
+		}
+
+		var num strings.Builder
+		for i < len(p) && unicode.IsDigit(rune(p[i])) {
+			num.WriteByte(p[i])
+			i++
+		}
+		i--
+		s := num.String()
+
+		n, e := strconv.Atoi(s)
+		if e != nil {
+			error("cannot tokenize")
+		}
+		tokens = append(tokens, Token{kind: tkNum, str: s, val: n})
 	}
 
-	p := os.Args[1]
+	tokens = append(tokens, Token{kind: tkEof})
+	token = &tokens[0]
+}
 
-	ws := regexp.MustCompile(`\b`).Split(p, -1)
+func advance() {
+	tokens = tokens[1:]
+	token = &tokens[0]
+}
 
-	fmt.Println(`.intel_syntax noprefix`)
-	fmt.Println(`.globl main`)
-	fmt.Println(`main:`)
-	fmt.Println("\tmov rax, ", ws[0])
+func consume(op byte) bool {
+	if token.kind != tkReserved || token.str[0] != op {
+		return false
+	}
+	advance()
+	return true
+}
 
-	for i := 1; i < len(ws); i++ {
-		w := ws[i]
-		switch w[0] {
-		case '+':
-			i++
-			fmt.Println("\tadd rax, ", ws[i])
-		case '-':
-			i++
-			fmt.Println("\tsub rax, ", ws[i])
-		default:
-			die(`unexpected character '%c'`, w[0])
+func expect(op byte) {
+	if token.kind != tkReserved || token.str[0] != op {
+		error("expected %c", op)
+	}
+	advance()
+}
+
+func expectNumber() int {
+	if token.kind != tkNum {
+		error("expected a number")
+	}
+
+	val := token.val
+	advance()
+	return val
+}
+
+func atEof() bool { return token.kind == tkEof }
+
+func main() {
+	if len(os.Args) != 2 {
+		error("usage: 9cc [input]")
+	}
+
+	tokenize(os.Args[1])
+
+	fmt.Println(`.intel_syntax noprefix
+.globl main
+main:`)
+
+	fmt.Printf("\tmov rax, %d\n", expectNumber())
+
+	for !atEof() {
+		if consume('+') {
+			fmt.Printf("\tadd rax, %d\n", expectNumber())
+			continue
 		}
+
+		expect('-')
+		fmt.Printf("\tsub rax, %d\n", expectNumber())
 	}
 
 	fmt.Println("\tret")

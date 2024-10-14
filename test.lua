@@ -31,7 +31,7 @@ local function test(expected, input)
 	local actual = cmd ".\\tmp.exe"
 	local res = actual == expected
 
-	io.write(tostring(input), " => ")
+	io.write("'", tostring(input), "' => ")
 	if not res then
 		io.write(tostring(expected), " expected, but got ")
 	end
@@ -43,9 +43,11 @@ local function test(expected, input)
 	end
 end
 
+put "testing..."
 test(0, "0")
 test(42, "42")
 test(21, "5+20-4")
+test(41, " 12 + 34 - 5 ")
 
 put "OK"
 cleanup(true)
