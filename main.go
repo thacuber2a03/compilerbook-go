@@ -33,9 +33,10 @@ type (
 
 	Token struct {
 		kind  TokenKind
+		index int
 		val   int
 		str   string
-		index int
+		len   int
 	}
 )
 
@@ -59,8 +60,21 @@ func tokenize() {
 			continue
 		}
 
-		if strings.ContainsAny(string(c), "+-*/()") {
-			tokens = append(tokens, Token{kind: tkReserved, str: string(c), index: i})
+		if strings.HasPrefix(p[i:], "==") || strings.HasPrefix(p[i:], "!=") ||
+			strings.HasPrefix(p[i:], "<=") || strings.HasPrefix(p[i:], ">=") {
+			tokens = append(tokens, Token{
+				kind: tkReserved, index: i,
+				str: p[i : i+2], len: 2,
+			})
+			i++
+			continue
+		}
+
+		if strings.ContainsAny(string(c), "+-*/()<>") {
+			tokens = append(tokens, Token{
+				kind: tkReserved, index: i,
+				str: string(c), len: 1,
+			})
 			continue
 		}
 
@@ -76,7 +90,10 @@ func tokenize() {
 		if e != nil {
 			errorAt(i, "invalid token")
 		}
-		tokens = append(tokens, Token{kind: tkNum, str: s, val: n, index: index})
+		tokens = append(tokens, Token{
+			kind: tkNum, index: index,
+			str: s, len: len(s), val: n,
+		})
 		i--
 	}
 
@@ -89,19 +106,18 @@ func advance() {
 	token = &tokens[0]
 }
 
-func consume(op byte) bool {
-	if token.kind != tkReserved || token.str[0] != op {
+func consume(op string) bool {
+	if token.kind != tkReserved || token.str != op {
 		return false
 	}
 	advance()
 	return true
 }
 
-func expect(op byte) {
-	if token.kind != tkReserved || token.str[0] != op {
-		errorAt(token.index, "expected %c", op)
+func expect(op string) {
+	if !consume(op) {
+		errorAt(token.index, "expected %s", op)
 	}
-	advance()
 }
 
 func expectNumber() int {
@@ -115,6 +131,10 @@ func expectNumber() int {
 }
 
 func atEof() bool { return token.kind == tkEof }
+
+//
+// Code generator
+//
 
 type (
 	NodeKind int
@@ -131,6 +151,10 @@ const (
 	ndSub
 	ndMul
 	ndDiv
+	ndEq
+	ndNe
+	ndLt
+	ndLe
 	ndNum
 )
 
@@ -143,9 +167,9 @@ func newNodeNum(val int) *Node {
 }
 
 func primary() *Node {
-	if consume('(') {
+	if consume("(") {
 		node := expr()
-		expect(')')
+		expect(")")
 		return node
 	}
 
@@ -153,9 +177,9 @@ func primary() *Node {
 }
 
 func unary() *Node {
-	if consume('-') {
+	if consume("-") {
 		return newNode(ndSub, newNodeNum(0), unary())
-	} else if consume('+') {
+	} else if consume("+") {
 		return unary()
 	}
 
@@ -166,9 +190,9 @@ func mul() *Node {
 	node := unary()
 
 	for {
-		if consume('*') {
+		if consume("*") {
 			node = newNode(ndMul, node, unary())
-		} else if consume('/') {
+		} else if consume("/") {
 			node = newNode(ndDiv, node, unary())
 		} else {
 			return node
@@ -176,19 +200,55 @@ func mul() *Node {
 	}
 }
 
-func expr() *Node {
+func add() *Node {
 	node := mul()
 
 	for {
-		if consume('+') {
+		if consume("+") {
 			node = newNode(ndAdd, node, mul())
-		} else if consume('-') {
+		} else if consume("-") {
 			node = newNode(ndSub, node, mul())
 		} else {
 			return node
 		}
 	}
 }
+
+func relational() *Node {
+	node := add()
+
+	for {
+		if consume("<") {
+			node = newNode(ndLt, node, add())
+		} else if consume("<=") {
+			node = newNode(ndLe, node, add())
+
+		// opposite equivalents
+		} else if consume(">") {
+			node = newNode(ndLt, add(), node)
+		} else if consume(">=") {
+			node = newNode(ndLe, add(), node)
+		} else {
+			return node
+		}
+	}
+}
+
+func equality() *Node {
+	node := relational()
+
+	for {
+		if consume("==") {
+			node = newNode(ndEq, node, relational())
+		} else if consume("!=") {
+			node = newNode(ndNe, node, relational())
+		} else {
+			return node
+		}
+	}
+}
+
+func expr() *Node { return equality() }
 
 func gen(node *Node) {
 	if node.kind == ndNum {
@@ -212,6 +272,22 @@ func gen(node *Node) {
 	case ndDiv:
 		fmt.Println("\tcqo")
 		fmt.Println("\tidiv rdi")
+	case ndEq:
+		fmt.Println("\tcmp rax, rdi")
+		fmt.Println("\tsete al")
+		fmt.Println("\tmovzb rax, al")
+	case ndNe:
+		fmt.Println("\tcmp rax, rdi")
+		fmt.Println("\tsetne al")
+		fmt.Println("\tmovzb rax, al")
+	case ndLt:
+		fmt.Println("\tcmp rax, rdi")
+		fmt.Println("\tsetl al")
+		fmt.Println("\tmovzb rax, al")
+	case ndLe:
+		fmt.Println("\tcmp rax, rdi")
+		fmt.Println("\tsetle al")
+		fmt.Println("\tmovzb rax, al")
 	}
 
 	fmt.Println("\tpush rax")

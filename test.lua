@@ -65,5 +65,24 @@ test(20,  "--+20" )
 test(-10, "10-20" )
 test(10,  "-10+20")
 
+-- comparisons
+-- tests taken from ref impl
+test(0, '0==1'  )
+test(1, '42==42')
+test(1, '0!=1'  )
+test(0, '42!=42')
+test(1, '0<1'   )
+test(0, '1<1'   )
+test(0, '2<1'   )
+test(1, '0<=1'  )
+test(1, '1<=1'  )
+test(0, '2<=1'  )
+test(1, '1>0'   )
+test(0, '1>1'   )
+test(0, '1>2'   )
+test(1, '1>=0'  )
+test(1, '1>=1'  )
+test(0, '1>=2'  )
+
 put "OK"
 cleanup(true)
