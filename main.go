@@ -12,7 +12,7 @@ var userInput string
 
 func errorAt(loc int, format string, a ...any) {
 	fmt.Fprintln(os.Stderr, userInput)
-	fmt.Fprintf(os.Stderr, "%s^ ",  strings.Repeat(" ", loc))
+	fmt.Fprintf(os.Stderr, "%s^ ", strings.Repeat(" ", loc))
 	fmt.Fprintf(os.Stderr, format, a...)
 	fmt.Fprintln(os.Stderr)
 	os.Exit(1)
@@ -23,6 +23,10 @@ func die(format string, a ...any) {
 	fmt.Fprintln(os.Stderr)
 	os.Exit(1)
 }
+
+//
+// Tokenizer
+//
 
 type (
 	TokenKind int
@@ -55,7 +59,7 @@ func tokenize() {
 			continue
 		}
 
-		if c == '+' || c == '-' {
+		if strings.ContainsAny(string(c), "+-*/()") {
 			tokens = append(tokens, Token{kind: tkReserved, str: string(c), index: i})
 			continue
 		}
@@ -70,7 +74,7 @@ func tokenize() {
 
 		n, e := strconv.Atoi(s)
 		if e != nil {
-			errorAt(i, "cannot tokenize")
+			errorAt(i, "invalid token")
 		}
 		tokens = append(tokens, Token{kind: tkNum, str: s, val: n, index: index})
 		i--
@@ -112,6 +116,97 @@ func expectNumber() int {
 
 func atEof() bool { return token.kind == tkEof }
 
+type (
+	NodeKind int
+
+	Node struct {
+		kind     NodeKind
+		lhs, rhs *Node
+		val      int
+	}
+)
+
+const (
+	ndAdd NodeKind = iota
+	ndSub
+	ndMul
+	ndDiv
+	ndNum
+)
+
+func newNode(kind NodeKind, lhs, rhs *Node) *Node {
+	return &Node{kind: kind, lhs: lhs, rhs: rhs}
+}
+
+func newNodeNum(val int) *Node {
+	return &Node{kind: ndNum, val: val}
+}
+
+func primary() *Node {
+	if consume('(') {
+		node := expr()
+		expect(')')
+		return node
+	}
+
+	return newNodeNum(expectNumber())
+}
+
+func mul() *Node {
+	node := primary()
+
+	for {
+		if consume('*') {
+			node = newNode(ndMul, node, primary())
+		} else if consume('/') {
+			node = newNode(ndDiv, node, primary())
+		} else {
+			return node
+		}
+	}
+}
+
+func expr() *Node {
+	node := mul()
+
+	for {
+		if consume('+') {
+			node = newNode(ndAdd, node, mul())
+		} else if consume('-') {
+			node = newNode(ndSub, node, mul())
+		} else {
+			return node
+		}
+	}
+}
+
+func gen(node *Node) {
+	if node.kind == ndNum {
+		fmt.Printf("\tpush %d\n", node.val)
+		return
+	}
+
+	gen(node.lhs)
+	gen(node.rhs)
+
+	fmt.Println("\tpop rdi")
+	fmt.Println("\tpop rax")
+
+	switch node.kind {
+	case ndAdd:
+		fmt.Println("\tadd rax, rdi")
+	case ndSub:
+		fmt.Println("\tsub rax, rdi")
+	case ndMul:
+		fmt.Println("\timul rax, rdi")
+	case ndDiv:
+		fmt.Println("\tcqo")
+		fmt.Println("\tidiv rdi")
+	}
+
+	fmt.Println("\tpush rax")
+}
+
 func main() {
 	if len(os.Args) != 2 {
 		die("usage: 9cc [input]")
@@ -119,22 +214,14 @@ func main() {
 
 	userInput = os.Args[1]
 	tokenize()
+	node := expr()
 
 	fmt.Println(`.intel_syntax noprefix
 .globl main
 main:`)
 
-	fmt.Printf("\tmov rax, %d\n", expectNumber())
+	gen(node)
 
-	for !atEof() {
-		if consume('+') {
-			fmt.Printf("\tadd rax, %d\n", expectNumber())
-			continue
-		}
-
-		expect('-')
-		fmt.Printf("\tsub rax, %d\n", expectNumber())
-	}
-
+	fmt.Println("\tpop rax")
 	fmt.Println("\tret")
 }

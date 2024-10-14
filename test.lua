@@ -26,7 +26,7 @@ cmd("go build -o 9cc.exe .", true)
 put "done\n" -- extra \n intended
 
 local function test(expected, input)
-	cmd('.\\9cc.exe "'..input..'" > tmp.s')
+	cmd('.\\9cc.exe "'..input..'" > tmp.s', true)
 	cmd "cc -o tmp tmp.s"
 	local actual = cmd ".\\tmp.exe"
 	local res = actual == expected
@@ -44,10 +44,19 @@ local function test(expected, input)
 end
 
 put "testing..."
-test(0, "0")
-test(42, "42")
-test(21, "5+20-4")
+
+-- single numbers
+test(0,  "0"            )
+test(42, "42"           )
+
+-- basic tokenization
+test(21, "5+20-4"       )
 test(41, " 12 + 34 - 5 ")
+
+-- complex expressions
+test(47, "5+6*7"        )
+test(15, "5*(9-6)"      )
+test(4,  "(3+5)/2"      )
 
 put "OK"
 cleanup(true)
