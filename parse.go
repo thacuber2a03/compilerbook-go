@@ -1,5 +1,8 @@
 package main
 
+// Copyright (c) 2024 @thacuber2a03
+// This software is released under the terms of the MIT License. See LICENSE for details.
+
 import (
 	"fmt"
 	"os"
@@ -22,6 +25,7 @@ type (
 
 const (
 	tkReserved TokenKind = iota
+	tkIdent
 	tkNum
 	tkEof
 )
@@ -59,9 +63,17 @@ func tokenize() {
 			continue
 		}
 
-		if strings.ContainsAny(string(c), "+-*/()<>") {
+		if strings.ContainsAny(string(c), "+-*/()<>=;") {
 			tokens = append(tokens, Token{
 				kind: tkReserved, index: i,
+				str: string(c), len: 1,
+			})
+			continue
+		}
+
+		if 'a' <= c && c <= 'z' {
+			tokens = append(tokens, Token{
+				kind: tkIdent, index: i,
 				str: string(c), len: 1,
 			})
 			continue
@@ -103,6 +115,15 @@ func consume(op string) bool {
 	return true
 }
 
+func consumeIdent() (*Token, bool) {
+	if token.kind != tkIdent {
+		return nil, false
+	}
+	t := token
+	advance()
+	return t, true
+}
+
 func expect(op string) {
 	if !consume(op) {
 		errorAt(token.index, "expected %s", op)
@@ -127,7 +148,8 @@ type (
 	Node struct {
 		kind     NodeKind
 		lhs, rhs *Node
-		val      int
+		val      int // only for ndNum
+		offset   int // only for ndLvar
 	}
 )
 
@@ -140,7 +162,14 @@ const (
 	ndNe
 	ndLt
 	ndLe
+
+	ndAssign
+	ndLvar
 	ndNum
+)
+
+var (
+	code = make([]*Node, 0, 100)
 )
 
 func newNode(kind NodeKind, lhs, rhs *Node) *Node {
@@ -149,6 +178,7 @@ func newNode(kind NodeKind, lhs, rhs *Node) *Node {
 
 func newNodeNum(val int) *Node { return &Node{kind: ndNum, val: val} }
 
+// primary = num | ident | "(" expr ")"
 func primary() *Node {
 	if consume("(") {
 		node := expr()
@@ -156,9 +186,17 @@ func primary() *Node {
 		return node
 	}
 
+	if tok, ok := consumeIdent(); ok {
+		return &Node{
+			kind:   ndLvar,
+			offset: int(tok.str[0]-'a'+1) * 8,
+		}
+	}
+
 	return newNodeNum(expectNumber())
 }
 
+// unary = ("+" | "-")? primary
 func unary() *Node {
 	if consume("-") {
 		return newNode(ndSub, newNodeNum(0), unary())
@@ -169,6 +207,7 @@ func unary() *Node {
 	return primary()
 }
 
+// mul = unary ("*" unary | "/" unary)*
 func mul() *Node {
 	node := unary()
 
@@ -183,6 +222,7 @@ func mul() *Node {
 	}
 }
 
+// add = mul ("+" mul | "-" mul)*
 func add() *Node {
 	node := mul()
 
@@ -197,6 +237,7 @@ func add() *Node {
 	}
 }
 
+// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
 func relational() *Node {
 	node := add()
 
@@ -205,8 +246,6 @@ func relational() *Node {
 			node = newNode(ndLt, node, add())
 		} else if consume("<=") {
 			node = newNode(ndLe, node, add())
-
-			// opposite equivalents
 		} else if consume(">") {
 			node = newNode(ndLt, add(), node)
 		} else if consume(">=") {
@@ -217,6 +256,7 @@ func relational() *Node {
 	}
 }
 
+// equality = relational ("==" relational | "!=" relational)*
 func equality() *Node {
 	node := relational()
 
@@ -231,4 +271,28 @@ func equality() *Node {
 	}
 }
 
-func expr() *Node { return equality() }
+// assign = equality ("=" assign)?
+func assign() *Node {
+	node := equality()
+	if consume("=") {
+		node = newNode(ndAssign, node, assign())
+	}
+	return node
+}
+
+// expr = assign
+func expr() *Node { return assign() }
+
+// stmt = expr ";"
+func stmt() *Node {
+	node := expr()
+	expect(";")
+	return node
+}
+
+// program = stmt*
+func program() {
+	for !atEof() {
+		code = append(code, stmt())
+	}
+}

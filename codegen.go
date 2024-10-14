@@ -1,12 +1,44 @@
 package main
 
+// Copyright (c) 2024 @thacuber2a03
+// This software is released under the terms of the MIT License. See LICENSE for details.
+
 // this file is pretty small...
 
 import "fmt"
 
+func genLval(node *Node) {
+	if node.kind != ndLvar {
+		die("left side of assignment isn't a variable")
+	}
+
+	fmt.Println("\tmov rax, rbp")
+	fmt.Printf("\tsub rax, %d\n", node.offset)
+	fmt.Println("\tpush rax")
+	fmt.Println()
+}
+
 func gen(node *Node) {
-	if node.kind == ndNum {
-		fmt.Printf("\tpush %d\n", node.val)
+	switch node.kind {
+	case ndNum:
+		fmt.Printf("\tpush %d\n\n", node.val)
+		return
+	case ndLvar:
+		genLval(node)
+		fmt.Println("\tpop rax")
+		fmt.Println("\tmov rax, [rax]")
+		fmt.Println("\tpush rax")
+		fmt.Println()
+		return
+	case ndAssign:
+		genLval(node.lhs)
+		gen(node.rhs)
+
+		fmt.Println("\tpop rdi")
+		fmt.Println("\tpop rax")
+		fmt.Println("\tmov [rax], rdi")
+		fmt.Println("\tpush rdi")
+		fmt.Println()
 		return
 	}
 
@@ -26,6 +58,7 @@ func gen(node *Node) {
 	case ndDiv:
 		fmt.Println("\tcqo")
 		fmt.Println("\tidiv rdi")
+
 	case ndEq:
 		fmt.Println("\tcmp rax, rdi")
 		fmt.Println("\tsete al")
@@ -45,4 +78,5 @@ func gen(node *Node) {
 	}
 
 	fmt.Println("\tpush rax")
+	fmt.Println()
 }

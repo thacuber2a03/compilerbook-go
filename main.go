@@ -1,5 +1,8 @@
 package main
 
+// Copyright (c) 2024 @thacuber2a03
+// This software is released under the terms of the MIT License. See LICENSE for details.
+
 import (
 	"fmt"
 	"os"
@@ -18,14 +21,26 @@ func main() {
 
 	userInput = os.Args[1]
 	tokenize()
-	node := expr()
+	program()
 
 	fmt.Println(`.intel_syntax noprefix
 .globl main
 main:`)
 
-	gen(node)
+	// allocate space for 26 variables (jeez)
+	fmt.Println("\tpush rbp")
+	fmt.Println("\tmov rbp, rsp")
+	fmt.Println("\tsub rsp, 208")
+	fmt.Println()
 
-	fmt.Println("\tpop rax")
+	for _, e := range code {
+		gen(e)
+		// pop result of expression from stack to avoid overflow
+		fmt.Println("\tpop rax")
+	}
+
+	// result of last expression is in rax; it will be the return value
+	fmt.Println("\n\tmov rsp, rbp")
+	fmt.Println("\tpop rbp")
 	fmt.Println("\tret")
 }
