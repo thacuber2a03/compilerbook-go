@@ -9,6 +9,8 @@ local function cleanup(rems)
 	os.remove "9cc.exe" -- ???
 end
 
+cleanup(true)
+
 local function cmd(c, exit)
 	local res, term, code = os.execute(c)
 	if not res and (exit or term ~= "exit") then
@@ -43,6 +45,7 @@ end
 
 test(0, "0")
 test(42, "42")
+test(21, "5+20-4")
 
 put "OK"
 cleanup(true)
