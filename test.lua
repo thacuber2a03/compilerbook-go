@@ -46,8 +46,8 @@ end
 put "testing..."
 
 -- single numbers
-test(0,  "0"            )
-test(42, "42"           )
+test(0,  "0" )
+test(42, "42")
 
 -- basic tokenization
 test(21, "5+20-4"       )
@@ -58,6 +58,12 @@ test(47, "5+6*7"        )
 test(15, "5*(9-6)"      )
 test(4,  "(3+5)/2"      )
 
+-- unary expressions
+test(-5,  "-5"    )
+test(20,  "--20"  )
+test(20,  "--+20" )
+test(-10, "10-20" )
+test(10,  "-10+20")
+
 put "OK"
 cleanup(true)
-
